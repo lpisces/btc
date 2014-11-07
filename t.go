@@ -9,23 +9,34 @@ import (
   "syscall"
   "github.com/takama/daemon"
   "time"
-  "net/http"
-  "io/ioutil"
-  "github.com/bitly/go-simplejson"
+  //"net/http"
+  //"io/ioutil"
+  //"github.com/bitly/go-simplejson"
   "database/sql"
    _ "github.com/go-sql-driver/mysql"
-  "encoding/json"
-  "strconv"
+  //"encoding/json"
+  //"strconv"
   //"strings"
   //"reflect"
 )
 
 const (
-  name        = "btc"
+  name        = "btc_t"
   description = "BTC AUTO TRADE SERVICE"
-  port = ":9977"
-  api_url = "https://data.btcchina.com/data/historydata"
+  port = ":9979"
+
+  minute_5 = 300
+  minute_30 = 1800
 )
+
+type K struct {
+ o float32
+ c float32
+ h float32
+ l float32
+ v float32
+ date int
+}
 
 // Service has embedded daemon
 type Service struct {
@@ -74,22 +85,22 @@ func (service *Service) Manage() (string, error) {
   listen := make(chan net.Conn, 100)
   go acceptConnection(listener, listen)
 
-  fetch_flag := make(chan bool, 1)
+  t_flag := make(chan bool, 1)
 
   // loop work cycle with accept connections or interrupt
   // by system signal
   for {
-    time.Sleep(60 * time.Second)
-    fetch_flag <- true
-    fetch()
-    <-fetch_flag
+    time.Sleep(5 * time.Second)
+    t_flag <- true
+    t()
+    <-t_flag
   }
 
   // never happen, but need to complete code
   return usage, nil
 }
 
-func fetch() {
+func t() {
   // db connect 
   db, err := sql.Open("mysql", "btc:btc123@tcp(localhost:3306)/btc?charset=utf8")
   if err != nil {
@@ -100,85 +111,72 @@ func fetch() {
   defer db.Close()
 
   // get last row
-  rows, err := db.Query("SELECT id, date, price, amount, cast(tid as unsigned), ttype FROM btc.history order by tid desc limit 1")
+  rows, err := db.Query("SELECT id, cast(date as unsigned), h, l, o, c FROM btc.k_5_minute order by date desc limit 60")
   if err != nil {
     log.Println("GET LAST ROW ERROR!")
     log.Println(err)
     return
   }
-  last_tid := 0
+  data := make([]K, 60)
+  n := 0
+  var ma60 float32
   for rows.Next() {
     var id int
-    var tid int
     var date int
-    var price string
-    var amount string
-    var ttype string
-    err = rows.Scan(&id, &date, &price, &amount, &tid, &ttype)
+    var h float32
+    var l float32
+    var o float32
+    var c float32
+    var v float32
+    err = rows.Scan(&id, &date, &h, &l, &o, &c)
     if err != nil {
-      log.Println("QUERY LAST ROW ERROR!")
+      log.Println("QUERY LAST k_5 ERROR!")
       log.Println(err)
       return
     }
-    last_tid = tid
+    k := K{o: o, c: c, l: l, h:h, date: date, v: v}
+    data = append(data, k)
+    n += 1
+    ma60 += c
   }
+  ma60 /= 60.0
 
-  url := api_url
-  if (last_tid == 0) {
-    url = api_url
-  } else {
-    tid := strconv.Itoa(last_tid)
-    url = api_url + "?since=" + tid + "&limit=500&sincetype=id"
-  }
-  resp, err := http.Get(url)
-  if err != nil {
-    log.Println("API ACCESS ERROR!")
+  if n < 60 {
+    log.Println("WAITING FOR DATA, LESS THAN 60 K!")
     return
   }
-  defer resp.Body.Close()
-  body, err := ioutil.ReadAll(resp.Body)
 
-  js, err := simplejson.NewJson(body)
-  if err != nil {
-    log.Println("JSON FORMAT ERROR!")
+  cur_time := int(time.Now().Unix())
+
+  if cur_time - data[0].date > 300 {
+    log.Println("WAITING FOR DATA!")
     return
   }
-  arr, err := js.Array()
 
-  for _, v := range arr {
-    date :=v.(map[string]interface{})["date"]
-    price :=v.(map[string]interface{})["price"]
-    amount :=v.(map[string]interface{})["amount"]
-    tid :=v.(map[string]interface{})["tid"]
-    ttype :=v.(map[string]interface{})["type"]
-
-    //log.Println(date.(string))
-    //log.Println(price.(json.Number))
-    //log.Println(amount.(json.Number))
-    //log.Println(tid.(string))
-    //log.Println(ttype.(string))
-
-    stmt, err := db.Prepare("INSERT into btc.history set date=?,price=?,amount=?,tid=?,ttype=?")
-    if err != nil {
-      log.Println("MYSQL FORMAT INSERT ERROR!")
-      log.Println(err)
-      return
+  var h_24 float32
+  for _, v := range data[1:24] {
+    if h_24 < v.h {
+      h_24 = v.h
     }
-    res, err := stmt.Exec(date.(string), string(price.(json.Number)), string(amount.(json.Number)), tid.(string), ttype.(string))
-    if err != nil {
-      log.Println("MYSQL INSERT ERROR!")
-      log.Println(err)
-      return
+  }
+  var l_12 float32 = 1000000.0
+  for _, v := range data[1:12] {
+    if v.l < l_12 {
+      l_12 = v.l
     }
-    id, err := res.LastInsertId()
-    if err != nil {
-      log.Println("GET LAST INSERT ID ERROR!")
-      log.Println(err)
-      return
-    }
-    log.Printf("LAST HISTORY ID IS %d", id)
   }
 
+  if data[0].c < ma60 {
+    log.Println("BEAR, WAITING FOR CHANCE!")
+  }
+
+  if data[0].c > h_24 {
+    log.Println("BUY@" + fmt.Sprintf("%f", data[0].c))
+  }
+
+  if data[0].c < l_12 {
+    log.Println("SELL@" + fmt.Sprintf("%f", data[0].c))
+  }
 
 }
 
@@ -190,6 +188,17 @@ func acceptConnection(listener net.Listener, listen chan<- net.Conn) {
       continue
     }
     listen <- conn
+  }
+}
+
+func handleClient(client net.Conn) {
+  for {
+    buf := make([]byte, 4096)
+    numbytes, err := client.Read(buf)
+    if numbytes == 0 || err != nil {
+      return
+    }
+    client.Write(buf)
   }
 }
 
