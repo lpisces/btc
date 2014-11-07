@@ -131,10 +131,11 @@ func fetch() {
     url = api_url + "?since=" + tid + "&limit=500&sincetype=id"
   }
   resp, err := http.Get(url)
-  defer resp.Body.Close()
   if err != nil {
     log.Println("API ACCESS ERROR!")
+    return
   }
+  defer resp.Body.Close()
   body, err := ioutil.ReadAll(resp.Body)
 
   js, err := simplejson.NewJson(body)
@@ -189,17 +190,6 @@ func acceptConnection(listener net.Listener, listen chan<- net.Conn) {
       continue
     }
     listen <- conn
-  }
-}
-
-func handleClient(client net.Conn) {
-  for {
-    buf := make([]byte, 4096)
-    numbytes, err := client.Read(buf)
-    if numbytes == 0 || err != nil {
-      return
-    }
-    client.Write(buf)
   }
 }
 
