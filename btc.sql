@@ -30,7 +30,26 @@ CREATE TABLE `history` (
   `tid` varchar(128) NOT NULL DEFAULT '',
   `ttype` varchar(64) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1271 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=9416 DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `k_5_minute`
+--
+
+DROP TABLE IF EXISTS `k_5_minute`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `k_5_minute` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `date` varchar(256) NOT NULL DEFAULT '',
+  `h` varchar(256) NOT NULL DEFAULT '',
+  `l` varchar(256) NOT NULL DEFAULT '',
+  `o` varchar(256) NOT NULL DEFAULT '',
+  `c` varchar(256) NOT NULL DEFAULT '',
+  `v` varchar(256) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -42,4 +61,4 @@ CREATE TABLE `history` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-11-07 17:37:06
+-- Dump completed on 2014-11-07 21:58:58
